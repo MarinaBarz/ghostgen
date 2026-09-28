@@ -27,6 +27,6 @@ jobs:
           context: .
           push: true
           tags: |
-            ghcr.io/marinabarz/ghostgen:v3
+            ghcr.io/marinabarz/ghostgen:v4
             ghcr.io/marinabarz/ghostgen:${{ github.sha }}
           labels: org.opencontainers.image.source=https://github.com/MarinaBarz/ghostgen

@@ -11,7 +11,11 @@ from .config import RECIPE
 class FakeEngine:
     def __init__(self, cfg): self.sec = cfg.fake_sec
 
-    def generate(self, images, prompt, seed):
+    two_phase = os.environ.get('GG_FAKE_TWO_PHASE') == '1'     # проверка цикла пачек без видеокарты
+
+    def encode_batch(self, items): return {key: ('fake', key) for key, *_ in items}
+
+    def generate(self, images, prompt, seed, embeds=None):
         time.sleep(self.sec)
         im = images[0].convert('RGB').resize((512, 512))
         from PIL import ImageDraw
@@ -33,17 +37,18 @@ class QwenEngine:
             from sdnq.loader import apply_sdnq_options_to_model
             pipe.transformer = apply_sdnq_options_to_model(pipe.transformer, use_quantized_matmul=True)
         vram = self.vram_gb = torch.cuda.get_device_properties(0).total_memory / 2**30
+        self.te_hook = None
         if vram >= 22:
             pipe.to('cuda')                                    # всё на карте: энкодер 6,3 + трансформер 3,8 + VAE
-        else:                                                  # карты 16 ГБ: энкодер ездит на карту на время разбора промпта
+        else:                                                  # карты 16 ГБ: энкодер ездит на карту только на время разбора промпта
             from accelerate import cpu_offload_with_hook
             pipe.to('cuda'); pipe.text_encoder.to('cpu'); torch.cuda.empty_cache()
-            pipe.text_encoder, te_hook = cpu_offload_with_hook(pipe.text_encoder, 'cuda')
-            _enc = pipe.encode_prompt
-
-            def enc(*a, **k):                                  # без выгрузки энкодер остаётся на карте: память переполнена, 37 с/товар
-                r = _enc(*a, **k); te_hook.offload(); torch.cuda.empty_cache(); return r
-            pipe.encode_prompt = enc
+            pipe.text_encoder, self.te_hook = cpu_offload_with_hook(pipe.text_encoder, 'cuda')
+        # Двухфазный режим (карты 16 ГБ): энкодер заезжает на карту один раз на пачку, разбирает все её промпты, уезжает;
+        # затем трансформер рисует товары по сохранённым разборам. Расчёт тот же — меняется только порядок.
+        self.two_phase = self.te_hook is not None and os.environ.get('GG_TWO_PHASE', '1') == '1'
+        self._enc_raw, self._mode, self._cap, self._replay = pipe.encode_prompt, 'inline', None, None
+        pipe.encode_prompt = self._enc
         mods = dict(pipe.transformer.named_modules()); deltas = {}
 
         def hook(m, i, o):
@@ -75,7 +80,37 @@ class QwenEngine:
                          num_inference_steps=r['steps'], sigmas=r['sigmas'], true_cfg_scale=r['true_cfg_scale'],
                          generator=self.torch.Generator('cuda').manual_seed(int(seed)), callback_on_step_end=cb).images[0]
 
-    def generate(self, images, prompt, seed): return self._call(images, prompt, seed)
+    class _Captured(Exception): pass
+
+    def _enc(self, *a, **k):
+        t = self.torch
+        if self._mode == 'capture':
+            r = self._enc_raw(*a, **k); self._cap = tuple(x.cpu() if t.is_tensor(x) else x for x in r); raise self._Captured
+        if self._mode == 'replay':
+            return tuple(x.cuda() if t.is_tensor(x) else x for x in self._replay)
+        r = self._enc_raw(*a, **k)
+        if self.te_hook: self.te_hook.offload(); t.cuda.empty_cache()   # без выгрузки память переполнена: 37 с/товар
+        return r
+
+    def encode_batch(self, items):
+        """items: [(ключ, images, prompt, seed)] -> {ключ: разбор на CPU}. Ключ задаёт вызывающий (промпт + sha входов товара)."""
+        out = {}
+        self._mode = 'capture'
+        try:
+            for key, images, prompt, seed in items:
+                try: self._call(images, prompt, seed)
+                except self._Captured: out[key] = self._cap
+                finally: self._cap = None
+        finally:
+            self._mode = 'inline'
+            if self.te_hook: self.te_hook.offload(); self.torch.cuda.empty_cache()
+        return out
+
+    def generate(self, images, prompt, seed, embeds=None):
+        if embeds is None: return self._call(images, prompt, seed)
+        self._mode, self._replay = 'replay', embeds
+        try: return self._call(images, prompt, seed)
+        finally: self._mode, self._replay = 'inline', None
 
     def bench(self):
         """Скорость шага на эталонном входе (серое пятно 768x1024): 3 прогона, берём последний (первые — прогрев)."""

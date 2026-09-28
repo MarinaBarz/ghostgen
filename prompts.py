@@ -12,7 +12,7 @@ GARMENT = {'dress': {'dress'}, 'trousers': {'bottom'}, 'shorts': {'bottom'}, 'sk
            'coat': {'outer', 'top'}, 'outerwear garment': {'outer', 'top'}, 'top': {'top', 'outer'}, 'sweater': {'top', 'outer'},
            'shirt': {'top', 'outer'}, 't-shirt': {'top', 'outer'}, 'lingerie item': {'lingerie', 'top'}, 'legwear item': {'legwear'},
            'robe': {'outer', 'dress'}, 'matching set': 'union'}
-SHOES = {'boot', 'sneaker', 'sandal', 'shoe', 'loafer', 'ankle boot', 'slip-on shoe', 'clog'}
+SHOES = {'boot', 'sneaker', 'sandal', 'shoe', 'loafer', 'ankle boot', 'slip-on shoe', 'clog', 'mule'}
 ACC = {'jewelry item': {'jewelry'}, 'bag': {'bag'}, 'hat': {'headwear'}, 'belt': {'belt'}, 'scarf': {'scarf'}, 'glove': {'gloves'},
        'eyewear': {'eyewear'}, 'fashion product': None, 'candle': None, 'keychain': None}
 UPPER = {'top', 'sweater', 'shirt', 't-shirt', 'jacket', 'coat', 'outerwear garment'}
@@ -44,3 +44,30 @@ def prompt(noun, n, title):
          "natural shading. The product in the final image must be the one from Image 1.")
     return p + (HEM if noun in UPPER else '')
 
+
+
+# вид вещи по названию (как в prepare_sample_jobs 26.09, + шарфы) и, если не узнали, по категории товара в базе
+SHOE_STEMS = {"сапог": "boot", "ботин": "boot", "кроссов": "sneaker", "кед": "sneaker", "лофер": "loafer", "туфл": "shoe",
+              "босонож": "sandal", "сандал": "sandal", "мюл": "mule", "ботильон": "ankle boot", "угги": "boot", "дутики": "boot",
+              "казаки": "boot", "слипон": "slip-on shoe", "шлепан": "sandal", "шлёпан": "sandal", "вьетнамк": "sandal", "клоги": "clog"}
+WORDS = [(r"костюм|комплект|набор", "matching set"), (r"плать|сарафан", "dress"), (r"юбк", "skirt"), (r"брюк|джинс|леггинс", "trousers"),
+         (r"шорт", "shorts"), (r"легинс|джоггер", "trousers"), (r"велосипедк", "shorts"), (r"куртк|жакет|пиджак|блейзер", "jacket"),
+         (r"пальто|плащ|тренч|шуб", "coat"), (r"бомбер|олимпийк|ветровк", "jacket"), (r"дубл[её]нк", "coat"), (r"рубаш|блуз", "shirt"),
+         (r"футболк", "t-shirt"), (r"топ|майк|боди", "top"), (r"свитер|sweater|джемпер|кардиган|худи|толстовк|кофта|рашгард", "sweater"),
+         (r"пижам|термокомби", "matching set"), (r"кимоно|накидк", "robe"), (r"смокинг", "jacket"),
+         (r"сумк|рюкзак|шопер|холдер|\bbag\b", "bag"), (r"очк", "eyewear"), (r"ремень|пояс", "belt"),
+         (r"кольц|серьг|колье|цепочк|браслет|кафф|брошь|чокер|крест|украшени|значок", "jewelry item"),
+         (r"шапк|кепк|панам|шляп|чепец|бандан|косынк|ободок", "hat"), (r"шарф|палантин|платок|снуд", "scarf"),
+         (r"митенк|перчатк", "glove"), (r"стринг|плавк", "lingerie item"), (r"свеча", "candle"), (r"брелок", "keychain")]
+CATEGORY = {'Tops': 'top', 'Outerwear': 'outerwear garment', 'Pants': 'trousers', 'Jewelry': 'jewelry item', 'Dresses & Jumpsuits': 'dress',
+            'Dresses': 'dress', 'Footwear': 'shoe', 'Skirts': 'skirt', 'Bags & Luggage': 'bag', 'Underwear & Swimwear': 'lingerie item',
+            'Shorts': 'shorts', 'Legwear': 'legwear item', 'Accessories': 'fashion product'}
+
+
+def noun(title, category=None):
+    t = (title or '').lower()
+    for stem, word in SHOE_STEMS.items():
+        if stem in t and category in ('Footwear', 'Outerwear', None): return word
+    for pattern, word in WORDS:
+        if re.search(pattern, t): return word
+    return CATEGORY.get(category, 'fashion product')
