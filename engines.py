@@ -38,7 +38,12 @@ class QwenEngine:
         else:                                                  # карты 16 ГБ: энкодер ездит на карту на время разбора промпта
             from accelerate import cpu_offload_with_hook
             pipe.to('cuda'); pipe.text_encoder.to('cpu'); torch.cuda.empty_cache()
-            pipe.text_encoder, _ = cpu_offload_with_hook(pipe.text_encoder, 'cuda')
+            pipe.text_encoder, te_hook = cpu_offload_with_hook(pipe.text_encoder, 'cuda')
+            _enc = pipe.encode_prompt
+
+            def enc(*a, **k):                                  # без выгрузки энкодер остаётся на карте: память переполнена, 37 с/товар
+                r = _enc(*a, **k); te_hook.offload(); torch.cuda.empty_cache(); return r
+            pipe.encode_prompt = enc
         mods = dict(pipe.transformer.named_modules()); deltas = {}
 
         def hook(m, i, o):
