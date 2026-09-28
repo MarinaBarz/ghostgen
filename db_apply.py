@@ -45,8 +45,11 @@ def main():
 
 
 def db_url():
-    u = os.environ.get('GG_DATABASE_URL_RW') or os.environ['DATABASE_URL']
-    return u.split('?schema=')[0]
+    """Адрес для psycopg2: из адреса Prisma убираются её собственные параметры (schema, connection_limit, …), libpq их не понимает."""
+    from urllib.parse import urlsplit, urlunsplit, parse_qsl, urlencode
+    u = urlsplit(os.environ.get('GG_DATABASE_URL_RW') or os.environ['DATABASE_URL'])
+    keep = [(k, v) for k, v in parse_qsl(u.query) if k in ('sslmode', 'sslrootcert', 'connect_timeout', 'application_name')]
+    return urlunsplit(u._replace(query=urlencode(keep)))
 
 
 def verify(st, a, k):
