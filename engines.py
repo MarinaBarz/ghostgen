@@ -32,7 +32,7 @@ class QwenEngine:
         if RECIPE['int8_matmul']:
             from sdnq.loader import apply_sdnq_options_to_model
             pipe.transformer = apply_sdnq_options_to_model(pipe.transformer, use_quantized_matmul=True)
-        vram = torch.cuda.get_device_properties(0).total_memory / 2**30
+        vram = self.vram_gb = torch.cuda.get_device_properties(0).total_memory / 2**30
         if vram >= 22:
             pipe.to('cuda')                                    # всё на карте: энкодер 6,3 + трансформер 3,8 + VAE
         else:                                                  # карты 16 ГБ: энкодер ездит на карту на время разбора промпта

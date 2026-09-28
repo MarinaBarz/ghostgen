@@ -29,10 +29,13 @@ def next_item(dirs):
 def main():
     cfg, stop = Cfg, Stop(); dirs = cfg.dirs(); q = Queue(cfg.redis_url); st = make_storage(cfg)
     t = time.time(); eng = make_engine(cfg); log('generator', f'модель загружена за {time.time() - t:.0f} с')
-    step = eng.bench(); log('generator', f'эталонный шаг {step:.3f} с (порог {cfg.max_step_sec})')
+    step = eng.bench(); vram = getattr(eng, 'vram_gb', 24.0)
+    limit = cfg.max_step_sec * (1.0 if vram >= 22 else cfg.small_gpu_factor)   # карты 16 ГБ гоняют энкодер в ОЗУ — шаг медленнее
+    log('generator', f'эталонный шаг {step:.3f} с, карта {vram:.0f} ГБ, порог {limit:.2f}')
+    q.beat(cfg.node + ':bench', {'step_sec': step, 'vram_gb': vram, 'limit': limit, 'rejected': step > limit})
     atomic_json(os.path.join(dirs['state'], 'bench.json'), {'step_sec': step, 'node': cfg.node, 't': time.time()})
-    if step > cfg.max_step_sec and cfg.on_salad:
-        reallocate(f'slow GPU: step {step:.2f}s > {cfg.max_step_sec}s'); sys.exit(3)
+    if step > limit and cfg.on_salad:
+        reallocate(f'slow GPU: step {step:.2f}s > {limit:.2f}s'); sys.exit(3)
     n_done, t_sum, fails = 0, 0.0, 0
     while not stop:
         name = next_item(dirs)

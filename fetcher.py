@@ -30,7 +30,13 @@ def fetch_item(st, it, chunk, dirs, pool):
     pid = it['pid']; final = os.path.join(dirs['inbox'], f'{chunk}__{pid}')
     tmp = os.path.join(dirs['inbox'], f'.tmp-{pid}-{uuid.uuid4().hex[:6]}'); os.makedirs(tmp)
     try:
-        datas = list(pool.map(lambda inp: st.get(inp['key']), it['inputs']))
+        def get(key):
+            for a in range(5):
+                try: return st.get(key)
+                except Exception as e:
+                    if a == 4: raise IOError(f'сеть: {e}')
+                    time.sleep(2 * (a + 1))
+        datas = list(pool.map(lambda inp: get(inp['key']), it['inputs']))
         files = []
         for inp, data in zip(it['inputs'], datas):
             if sha256(data) != inp['sha256']: raise ValueError(f'sha256 входа {inp["key"]} не совпал с манифестом')
@@ -75,9 +81,10 @@ def main():
                 if local_has(dirs, chunk, pid) or is_done(q, st, pid, RECIPE_ID): continue
                 while inbox_count(dirs) >= cfg.prefetch and not stop: time.sleep(0.5)
                 try: fetch_item(st, it, chunk, dirs, pool)
-                except Exception as e:                                      # вход испорчен — отказ по товару, пачка идёт дальше
-                    log('fetcher', 'отказ', pid, e)
-                    q.finish(pid, chunk, {'status': 'failed', 'stage': 'fetch', 'reason': str(e)[:300], 'node': cfg.node, 't': time.time()})
+                except Exception as e:                                      # отказ по товару, пачка идёт дальше
+                    stage = 'fetch-net' if isinstance(e, IOError) else 'fetch'  # сеть — поставить заново; испорченный вход — чинить подготовку
+                    log('fetcher', 'отказ', stage, pid, e)
+                    q.finish(pid, chunk, {'status': 'failed', 'stage': stage, 'reason': str(e)[:300], 'node': cfg.node, 't': time.time()})
             log('fetcher', 'пачка скачана', chunk)
     log('fetcher', 'остановлен')
 

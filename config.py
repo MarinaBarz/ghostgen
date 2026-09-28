@@ -44,7 +44,8 @@ class Cfg:
     heartbeat = env('GG_HEARTBEAT', 60, int)           # продление аренды, с
     prefetch = env('GG_PREFETCH', 48, int)             # сколько товаров держать скачанными впереди генерации
     engine = env('GG_ENGINE', 'qwen')                  # qwen | fake (для проверки без видеокарты)
-    max_step_sec = env('GG_MAX_STEP_SEC', 0.45, float) # медленнее — машина плохая, просим Salad переселить
+    max_step_sec = env('GG_MAX_STEP_SEC', 0.45, float) # шаг медленнее (карты 24 ГБ) — машина плохая, просим Salad переселить
+    small_gpu_factor = env('GG_SMALL_GPU_FACTOR', 2.5, float)   # карты < 22 ГБ: порог × этот множитель (замер уточнит)
     fake_sec = env('GG_FAKE_SEC', 0.2, float)
     model_dir = env('GG_MODEL_DIR', '/models/qwen-image-21-sdnq4')
     lora_dir = env('GG_LORA_DIR', '/models/lora')

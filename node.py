@@ -19,7 +19,9 @@ def start(name):
 def main():
     cfg = Cfg; dirs = cfg.dirs(); q = Queue(cfg.redis_url); drain = int(os.environ.get('GG_DRAIN_SEC', '90'))
     log('node', 'машина', cfg.node, '| хранилище', cfg.storage, '| движок', cfg.engine)
-    procs = {m: start(m) for m in MODULES}; restarts = {m: 0 for m in MODULES}
+    boot = start('bootstrap')                                     # модели качаются параллельно со скачиванием фото
+    procs = {m: start(m) for m in ('fetcher', 'uploader')}; restarts = {m: 0 for m in MODULES}
+    gen_started = False
     stopping = {'v': False}
 
     def on_stop(*a): stopping['v'] = True
@@ -34,7 +36,14 @@ def main():
                 p = os.path.join(dirs['state'], f)
                 if os.path.exists(p): info[f[:-5]] = json.load(open(p))
             q.beat(cfg.node, info); last = time.time()
-        for m, p in procs.items():
+        if not gen_started:
+            rc = boot.poll()
+            if rc == 0: procs['generator'] = start('generator'); gen_started = True; log('node', 'модели на месте — генератор запущен')
+            elif rc is not None:
+                restarts['generator'] += 1; log('node', f'скачивание моделей упало (код {rc}), повтор №{restarts["generator"]}')
+                if restarts['generator'] > 5: stopping['v'] = True; continue
+                time.sleep(30); boot = start('bootstrap')
+        for m, p in list(procs.items()):
             rc = p.poll()
             if rc is None: continue
             if m == 'generator' and rc == 3: log('node', 'машина медленная — выходим'); stopping['v'] = True; break
@@ -43,9 +52,11 @@ def main():
             time.sleep(min(60, 2 ** min(restarts[m], 6))); procs[m] = start(m)
         time.sleep(2)
     # остановка по порядку: скачивание → генерация → выгрузка
+    if boot.poll() is None: boot.kill()
     for m in ('fetcher', 'generator'):
-        if procs[m].poll() is None: procs[m].send_signal(signal.SIGTERM)
+        if m in procs and procs[m].poll() is None: procs[m].send_signal(signal.SIGTERM)
     for m in ('fetcher', 'generator'):
+        if m not in procs: continue
         try: procs[m].wait(timeout=60)
         except subprocess.TimeoutExpired: procs[m].kill()
     if procs['uploader'].poll() is None: procs['uploader'].send_signal(signal.SIGTERM)

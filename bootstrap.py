@@ -1,8 +1,10 @@
-"""Старт машины (команда контейнера): модель и адаптеры — если их ещё нет на диске, затем супервизор node.py.
+"""Модель и адаптеры на диск (если их ещё нет). Запускается супервизором node.py отдельным процессом ПАРАЛЛЕЛЬНО со скачиванием
+фото и выгрузкой: генератор стартует, когда этот процесс завершился успешно. В образе v2 модель и turbo-адаптер уже внутри —
+здесь докачивается только наш ghost-адаптер из хранилища (секунды).
 Модель и turbo-адаптер — публичные, с Hugging Face; наш ghost-адаптер — закрытый, из хранилища (models/…), со сверкой sha256.
 В образе ничего закрытого нет — образ можно держать публичным.
-  python -m ghostgen.bootstrap"""
-import os, sys, time
+  python -m ghostgen.bootstrap   (выход 0 — всё на месте)"""
+import os, time
 from .common import log, sha256_file
 from .config import Cfg, RECIPE
 from .storage import make_storage
@@ -23,7 +25,6 @@ def main():
             if sha256_file(tmp) != cfg.ghost_sha256: os.remove(tmp); raise SystemExit('sha256 ghost-адаптера не совпал — стоп')
             os.replace(tmp, g)
         log('bootstrap', f'модель и адаптеры на месте за {time.time() - t:.0f} с')
-    os.execv(sys.executable, [sys.executable, '-m', 'ghostgen.node'])
 
 
 if __name__ == '__main__':

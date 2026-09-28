@@ -12,7 +12,8 @@ jobs:
     steps:
       - name: Освободить место на раннере (базовый образ PyTorch большой)
         run: |
-          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL /usr/local/share/boost
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache /usr/local/share/boost \
+                      /usr/lib/jvm /usr/share/swift /opt/microsoft /opt/google /usr/local/share/powershell /usr/local/share/chromium
           docker system prune -af
           df -h /
       - uses: actions/checkout@v4
@@ -26,6 +27,6 @@ jobs:
           context: .
           push: true
           tags: |
-            ghcr.io/marinabarz/ghostgen:v1
+            ghcr.io/marinabarz/ghostgen:v2
             ghcr.io/marinabarz/ghostgen:${{ github.sha }}
           labels: org.opencontainers.image.source=https://github.com/MarinaBarz/ghostgen
