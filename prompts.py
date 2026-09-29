@@ -41,10 +41,8 @@ def prompt(noun, n, title):
          "colourways of the product; ignore their colour. No labels of any kind. Front view. The final result should have the look and quality "
          "of a luxury fashion house catalog photography. The garment should look professionally steamed, perfectly presented, and meticulously "
          "retouched while preserving the natural texture, construction, and realistic shape. Soft, diffused, even studio lighting with subtle "
-         "natural shading. The product in the final image must be the one from Image 1."
-         # 29.09 (пользователь, проба 20 вещей): видимая изнанка — той же тканью, без белых пятен и дыр в коллаже
-         " Show exactly one garment. If an inner part of the garment is visible, such as the inner back below the neckline or the lining,"
-         " it is the same fabric and colour as the garment itself, not white and not empty.")
+         "natural shading. The product in the final image must be the one from Image 1.")
+    # 29.09: приписку про изнанку (v6) пользователь отменила — промпт одежды как в v5
     return p + (HEM if noun in UPPER else '')
 
 
