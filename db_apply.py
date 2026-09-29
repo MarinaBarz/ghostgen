@@ -16,6 +16,7 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('--url-prefix', default=None, help='публичный адрес хранилища с префиксом; по умолчанию AWS_S3_PUBLIC_BASE_URL + префикс ghostgen/')
     ap.add_argument('--follow', action='store_true'); ap.add_argument('--every', type=int, default=30)
+    ap.add_argument('--shots', default=None, help='skip.jsonl подготовки: «уже предметное» с url -> копия в shots/ и collageImageUrl (источник shop)')
     ap.add_argument('--column', default='ghostImageUrl'); ap.add_argument('--recipe-column', default='ghostImageRecipe')
     ap.add_argument('--apply', action='store_true'); ap.add_argument('--overwrite', action='store_true'); ap.add_argument('--batch', type=int, default=500)
     a = ap.parse_args(); cfg = Cfg(); st = make_storage(cfg)
@@ -68,6 +69,13 @@ def follow(a, cfg, st):
     mem = os.path.abspath(f'db_applied_{RECIPE_ID}.txt'); done = set(open(mem).read().split()) if os.path.exists(mem) else set()
     cond = '' if a.overwrite else f' AND "{a.column}" IS NULL'
     print(f'слежу: уже записано ранее {len(done)}, ссылки {a.url_prefix}', flush=True)
+    try:                                           # разово: фото для коллажа = наша генерация там, где оно ещё пусто (поля с 29.09)
+        cn = psycopg2.connect(db_url()); cu = cn.cursor()
+        cu.execute('UPDATE "Product" SET "collageImageUrl" = "ghostImageUrl", "collageImageSource" = %s '
+                   'WHERE "ghostImageUrl" IS NOT NULL AND "collageImageUrl" IS NULL', ('ghostgen',))
+        print('фото для коллажа из генераций заполнено:', cu.rowcount, flush=True); cn.commit(); cn.close()
+    except Exception as e: print('разовое заполнение не удалось:', repr(e)[:200], flush=True)
+    shots_mem = os.path.abspath('db_shots_done.txt'); shots = set(open(shots_mem).read().split()) if os.path.exists(shots_mem) else set()
     while True:
         try:
             new = [pid for pid, r in q.results() if r['status'] == 'ok' and pid not in done]
@@ -79,13 +87,62 @@ def follow(a, cfg, st):
                     cn = psycopg2.connect(db_url()); cu = cn.cursor(); hit = 0
                     for p, u in good:
                         cu.execute(f'UPDATE "Product" SET "{a.column}" = %s, "{a.recipe_column}" = %s WHERE id = %s{cond}', (u, RECIPE_ID, p)); hit += cu.rowcount
+                        cu.execute('UPDATE "Product" SET "collageImageUrl" = %s, "collageImageSource" = %s WHERE id = %s AND "collageImageUrl" IS NULL',
+                                   (u, 'ghostgen', p))
                     cn.commit(); cn.close()
                     with open(mem, 'a') as f: f.write(''.join(p + '\n' for p, _ in good))
                     done.update(p for p, _ in good)
                     print(time.strftime('%H:%M:%S'), f'записано {len(good)} (строк изменено {hit}), всего {len(done)}' + (f'; не сошлись {bad[:3]}' if bad else ''), flush=True)
         except Exception as e:
             print(time.strftime('%H:%M:%S'), 'ошибка, повторю:', repr(e)[:200], flush=True)
+        try:                                           # сырые пачки: «уже предметное» — машина сама положила shots/<pid>.jpg
+            new_shots = [pid for pid, r in q.results() if r['status'] == 'skip' and (r.get('stage') or '').startswith('уже предметное') and pid not in shots]
+            if new_shots:
+                cn = psycopg2.connect(db_url()); cu = cn.cursor(); hit = 0
+                for p in new_shots[:2000]:
+                    u = a.url_prefix.rstrip('/') + f'/shots/{p}.jpg'
+                    cu.execute('UPDATE "Product" SET "collageImageUrl" = %s, "collageImageSource" = %s WHERE id = %s AND "collageImageUrl" IS NULL', (u, 'shop', p)); hit += cu.rowcount
+                cn.commit(); cn.close()
+                with open(shots_mem, 'a') as f: f.write(''.join(p + '\n' for p in new_shots[:2000]))
+                shots.update(new_shots[:2000]); print(time.strftime('%H:%M:%S'), f'фото магазинов с машин: {len(new_shots[:2000])}, записано {hit}', flush=True)
+        except Exception as e: print(time.strftime('%H:%M:%S'), 'фото магазинов с машин: ошибка', repr(e)[:200], flush=True)
+        if a.shots:
+            try: shots_step(a, st, shots, shots_mem)
+            except Exception as e: print(time.strftime('%H:%M:%S'), 'фото магазинов: ошибка, повторю:', repr(e)[:200], flush=True)
         time.sleep(a.every)
+
+
+def shots_step(a, st, shots, mem, batch=100):
+    """Товары, у которых подготовка признала фото магазина предметным: копия в shots/<pid>.jpg (наше хранилище, публичная) ->
+    collageImageUrl (источник 'shop'), только если поле пусто. Не больше batch за проход."""
+    import io, ssl, urllib.request, urllib.parse, psycopg2
+    from PIL import Image
+    todo = []
+    for l in open(a.shots):
+        try: x = json.loads(l)
+        except Exception: continue
+        if x.get('skip') == 'уже предметное' and x.get('url') and x['pid'] not in shots: todo.append(x)
+        if len(todo) >= batch: break
+    if not todo: return
+    ctx = ssl._create_unverified_context(); rows = []
+
+    def one(x):
+        req = urllib.request.Request(urllib.parse.quote(x['url'], safe=':/?&=%'), headers={'User-Agent': 'Mozilla/5.0'})
+        try: d = urllib.request.urlopen(req, timeout=20, context=ctx).read(); im = Image.open(io.BytesIO(d)).convert('RGB')
+        except Exception: return x['pid'], None
+        b = io.BytesIO(); im.save(b, 'JPEG', quality=92); key = f"shots/{x['pid']}.jpg"
+        st.put(key, b.getvalue(), {'pid': x['pid'], 'src': urllib.parse.quote(x['url'], safe=':/?&=%')[:500]})   # метаданные S3 — только ASCII
+        return x['pid'], a.url_prefix.rstrip('/') + '/' + key
+    with ThreadPoolExecutor(16) as ex: res = list(ex.map(one, todo))
+    ok = [(p, u) for p, u in res if u]
+    if ok:
+        cn = psycopg2.connect(db_url()); cu = cn.cursor(); hit = 0
+        for p, u in ok:
+            cu.execute('UPDATE "Product" SET "collageImageUrl" = %s, "collageImageSource" = %s WHERE id = %s AND "collageImageUrl" IS NULL', (u, 'shop', p)); hit += cu.rowcount
+        cn.commit(); cn.close()
+    with open(mem, 'a') as f: f.write(''.join(p + '\n' for p, _ in res))
+    shots.update(p for p, _ in res)
+    print(time.strftime('%H:%M:%S'), f'фото магазинов: скопировано {len(ok)} из {len(res)}, записано в базу {hit if ok else 0}, всего {len(shots)}', flush=True)
 
 
 if __name__ == '__main__':

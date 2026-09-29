@@ -46,28 +46,45 @@ def prompt(noun, n, title):
 
 
 
-# вид вещи по названию (как в prepare_sample_jobs 26.09, + шарфы) и, если не узнали, по категории товара в базе
-SHOE_STEMS = {"сапог": "boot", "ботин": "boot", "кроссов": "sneaker", "кед": "sneaker", "лофер": "loafer", "туфл": "shoe",
-              "босонож": "sandal", "сандал": "sandal", "мюл": "mule", "ботильон": "ankle boot", "угги": "boot", "дутики": "boot",
-              "казаки": "boot", "слипон": "slip-on shoe", "шлепан": "sandal", "шлёпан": "sandal", "вьетнамк": "sandal", "клоги": "clog"}
-WORDS = [(r"костюм|комплект|набор", "matching set"), (r"плать|сарафан", "dress"), (r"юбк", "skirt"), (r"брюк|джинс|леггинс", "trousers"),
-         (r"шорт", "shorts"), (r"легинс|джоггер", "trousers"), (r"велосипедк", "shorts"), (r"куртк|жакет|пиджак|блейзер", "jacket"),
-         (r"пальто|плащ|тренч|шуб", "coat"), (r"бомбер|олимпийк|ветровк", "jacket"), (r"дубл[её]нк", "coat"), (r"рубаш|блуз", "shirt"),
-         (r"футболк", "t-shirt"), (r"топ|майк|боди", "top"), (r"свитер|sweater|джемпер|кардиган|худи|толстовк|кофта|рашгард", "sweater"),
-         (r"пижам|термокомби", "matching set"), (r"кимоно|накидк", "robe"), (r"смокинг", "jacket"),
-         (r"сумк|рюкзак|шопер|холдер|\bbag\b", "bag"), (r"очк", "eyewear"), (r"ремень|пояс", "belt"),
-         (r"кольц|серьг|колье|цепочк|браслет|кафф|брошь|чокер|крест|украшени|значок", "jewelry item"),
-         (r"шапк|кепк|панам|шляп|чепец|бандан|косынк|ободок", "hat"), (r"шарф|палантин|платок|снуд", "scarf"),
-         (r"митенк|перчатк", "glove"), (r"стринг|плавк", "lingerie item"), (r"свеча", "candle"), (r"брелок", "keychain")]
+# вид вещи по названию и, если не узнали, по категории товара в базе.
+# 28.09: слова ищутся только С НАЧАЛА слова («оторочка» — не «очки», «джинсовая» — не «джинсы»), а из нескольких найденных берётся
+# стоящее в названии раньше («Куртка с поясом» — куртка); «костюм/комплект» побеждает всегда. Прежняя версия (подстрока, первое правило
+# в списке) дала «парка с меховой оторочкой» -> очки и «джинсовая куртка» -> брюки.
+SHOE_STEMS = {"сапог": "boot", "сапож": "boot", "ботин": "boot", "кроссов": "sneaker", "кеды": "sneaker", "кедах": "sneaker", "лофер": "loafer",
+              "туфл": "shoe", "босонож": "sandal", "сандал": "sandal", "мюли": "mule", "ботильон": "ankle boot", "угги": "boot",
+              "дутики": "boot", "казаки": "boot", "слипон": "slip-on shoe", "шлепан": "sandal", "шлёпан": "sandal", "вьетнамк": "sandal",
+              "клоги": "clog", "балетк": "shoe", "мокасин": "loafer", "эспадрил": "shoe", "челси": "boot"}
+SETS = r"\b(?:костюм(?:ы|а|ом)?\b|комплект(?:ы|а|ом|е)?\b|набор(?:ы|а|ом)?\b|пижам[аыуе]\b|термокомби|двойк[аиу]\b|тройк[аиу]\b)"   # «костюмная ткань» — не комплект
+WORDS = [(r"плать|сарафан", "dress"), (r"юбк", "skirt"), (r"брюк|джинсы\b|джинс\b|леггинс|легинс|джоггер|кюлот|палаццо|чинос|бананы\b", "trousers"),
+         (r"шорт|велосипедк|бермуд", "shorts"), (r"куртк|жакет|пиджак|блейзер|бомбер|олимпийк|ветровк|косух|анорак|жилет|смокинг", "jacket"),
+         (r"пальто|плащ|тренч|шуб|дубл[её]нк|парк[аиу]?\b|пуховик|полупальто|бушлат|пончо", "coat"), (r"рубаш|блуз|сорочк", "shirt"),
+         (r"футболк|лонгслив|поло\b|топ\b|топик|майк|боди\b|корсет|бюстье", "top"), (r"бра\b", "lingerie item"),   # 28.09: футболка/лонгслив — просто top
+         (r"свитер|джемпер|кардиган|худи|толстовк|кофт|рашгард|пуловер|свитшот|водолазк", "sweater"),
+         (r"кимоно|накидк|халат", "robe"), (r"комбинезон", "matching set"),
+         (r"сумк|рюкзак|шопер|холдер|клатч|кошел[её]к|портмоне|визитниц|картхолдер|чехол|косметичк", "bag"), (r"очки\b|очков\b", "eyewear"),
+         (r"ремень|ремн|пояс\b|пояса\b", "belt"),
+         (r"кольц|серьг|серёжк|сережк|колье|цепочк|цепь|браслет|кафф|брошь|брош\b|чокер|крестик|подвеск|кулон|украшени|значок|пирсинг", "jewelry item"),
+         (r"шапк|кепк|панам|шляп|чепец|бандан|косынк|ободок|берет|бейсболк|балаклав", "hat"), (r"шарф|палантин|платок|снуд", "scarf"),
+         (r"митенк|перчатк|варежк", "glove"), (r"стринг|плавк|трусы|бюстгальтер|купальник|бикини", "lingerie item"),
+         (r"носк|колгот|гольф", "legwear item"), (r"свеча", "candle"), (r"брелок", "keychain")]
 CATEGORY = {'Tops': 'top', 'Outerwear': 'outerwear garment', 'Pants': 'trousers', 'Jewelry': 'jewelry item', 'Dresses & Jumpsuits': 'dress',
             'Dresses': 'dress', 'Footwear': 'shoe', 'Skirts': 'skirt', 'Bags & Luggage': 'bag', 'Underwear & Swimwear': 'lingerie item',
             'Shorts': 'shorts', 'Legwear': 'legwear item', 'Accessories': 'fashion product'}
+_CLOTHES = {'dress', 'skirt', 'trousers', 'shorts', 'jacket', 'coat', 'shirt', 'top', 'sweater'}
+_RX = [(re.compile(r"\b(?:" + p + ")"), w) for p, w in WORDS] + [(re.compile(r"\b" + st), w) for st, w in SHOE_STEMS.items()]
 
 
 def noun(title, category=None):
-    t = (title or '').lower()
-    for stem, word in SHOE_STEMS.items():
-        if stem in t and category in ('Footwear', 'Outerwear', None): return word
-    for pattern, word in WORDS:
-        if re.search(pattern, t): return word
-    return CATEGORY.get(category, 'fashion product')
+    t = (title or '').lower().replace('ё', 'е')
+    if re.search(SETS, t): return 'matching set'
+    found = []
+    for rx, w in _RX:
+        m = rx.search(t)
+        if m: found.append((m.start(), m.end(), w))
+    found.sort()
+    # «Кардиган и юбка», «Топ + шорты», «Жакет, брюки»: две разные вещи одежды через «и» / «+» / запятую — комплект (28.09)
+    cl = [f for f in found if f[2] in _CLOTHES]
+    for a, b in zip(cl, cl[1:]):
+        if a[2] != b[2] and re.fullmatch(r"[\w\s-]*?(\s+и\s+|\s*\+\s*|\s*,\s*)[\w\s-]*", t[a[1]:b[0]] or ' '):
+            if re.search(r"\s+и\s+|\+|,", t[a[1]:b[0]]): return 'matching set'
+    return found[0][2] if found else CATEGORY.get(category, 'fashion product')

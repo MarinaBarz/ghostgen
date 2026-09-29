@@ -25,6 +25,15 @@ def main():
             if sha256_file(tmp) != cfg.ghost_sha256: os.remove(tmp); raise SystemExit('sha256 ghost-адаптера не совпал — стоп')
             os.replace(tmp, g)
         log('bootstrap', f'модель и адаптеры на месте за {time.time() - t:.0f} с')
+    # детектор вещей для подготовки сырых пачек — только на настоящей машине; сбой НЕ мешает генерации обычных пачек
+    # (подготовка сама ждёт файл и без него откажет по товару с причиной «prep»)
+    if cfg.engine == 'qwen' and cfg.item_det_sha256 and not os.path.exists(cfg.item_det):
+        try:
+            os.makedirs(os.path.dirname(cfg.item_det), exist_ok=True); tmp = cfg.item_det + '.part'
+            make_storage(cfg).download(cfg.item_det_key, tmp)
+            if sha256_file(tmp) != cfg.item_det_sha256: os.remove(tmp); raise ValueError('sha256 детектора вещей не совпал')
+            os.replace(tmp, cfg.item_det); log('bootstrap', 'детектор вещей на месте')
+        except Exception as e: log('bootstrap', 'детектор вещей не скачан (генерация идёт дальше):', repr(e)[:200])
 
 
 if __name__ == '__main__':

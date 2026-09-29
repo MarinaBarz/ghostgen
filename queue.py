@@ -106,7 +106,9 @@ class Queue:
         """True — это первый итог по товару; False — итог уже был (повтор после вытеснения), новый не записан.
         В Redis — только короткая отметка «ok|пачка» / «failed|пачка|этап|причина» (~60 байт): полный итог лежит в хранилище
         results/…json. Redis общий и с вытеснением (allkeys-lru): чем меньше пишем, тем меньше давим на чужие ключи."""
-        v = f"ok|{chunk}" if result.get('status') == 'ok' else f"failed|{chunk}|{result.get('stage', '')}|{str(result.get('reason', ''))[:120]}"
+        st_ = result.get('status')
+        v = (f"ok|{chunk}" if st_ == 'ok' else f"skip|{chunk}|{str(result.get('reason', ''))[:80]}|" if st_ == 'skip'   # 29.09: подготовка на машине
+             else f"failed|{chunk}|{result.get('stage', '')}|{str(result.get('reason', ''))[:120]}")
         return bool(self._finish(keys=[self.K['result'], self.done_key(chunk), self.K['size'], self.K['complete'], self.K['leased'], self.K['owner']],
                                  args=[pid, chunk, v]))
 

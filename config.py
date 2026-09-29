@@ -50,6 +50,11 @@ class Cfg:
     model_dir = env('GG_MODEL_DIR', '/models/qwen-image-21-sdnq4')
     lora_dir = env('GG_LORA_DIR', '/models/lora')
     on_salad = bool(os.environ.get('SALAD_MACHINE_ID'))
+    # подготовка на машине (сырые пачки, 29.09): детектор вещей m896c14 — наш, закрытый, из хранилища models/ со сверкой sha256
+    item_det = env('GG_ITEM_DET', '/models/det/m896c14.pth')
+    item_det_key = env('GG_ITEM_DET_KEY', 'models/m896c14_checkpoint_best_ema.pth')
+    item_det_sha256 = env('GG_ITEM_DET_SHA256', 'c6b17fe43aa9f8eff4ad0b9ddffdd6018d3fcf8c84b0cdb10f6c2324f45ca6c0')
+    prep_threads = env('GG_PREP_THREADS', 4, int)      # сколько товаров готовить одновременно (скачивание фото — основное время)
 
     @classmethod
     def dirs(cls):

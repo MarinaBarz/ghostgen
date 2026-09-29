@@ -15,11 +15,14 @@ def main():
     if a.reap: print('возвращены:', q.reap())
     s = q.stats(); now = time.time()
     fails = collections.Counter(); failed = []
+    skips = collections.Counter()
     for pid, r in q.results():
-        if r.get('status') != 'ok': fails[f"{r.get('stage')}: {r.get('reason', '')[:60]}"] += 1; failed.append((pid, r))
+        if r.get('status') == 'skip': skips[r.get('stage')] += 1                     # подготовка на машине: пропуск с причиной
+        elif r.get('status') != 'ok': fails[f"{r.get('stage')}: {r.get('reason', '')[:60]}"] += 1; failed.append((pid, r))
     print(f"рецепт {RECIPE_ID}\nпачек {s['пачек']}: ждут {s['ждут']}, в работе {s['в работе']}, закрыто {s['закрыто']}")
     print(f"товаров {s['товаров']}, с итогом {s['с итогом']} (из них отказов {len(failed)})")
     for why, n in fails.most_common(10): print(f'  отказ ×{n}: {why}')
+    if skips: print('пропущено подготовкой:', dict(skips.most_common()))
     bad = q.r.hgetall(q.p + 'bad')
     if bad: print('пачки в карантине:', bad)
     for n, v in sorted(s['машины'].items()):
