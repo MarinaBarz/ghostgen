@@ -69,6 +69,10 @@ def get_prep(cfg):
         while not os.path.exists(cfg.item_det):
             if time.time() - t > 900: raise IOError('детектор вещей не появился за 15 мин')
             time.sleep(5)
+        try:                                                              # детекторам — не больше доли видеопамяти: иначе кеш PyTorch
+            import torch                                                  # разрастается и генерация задыхается (29.09: 24/24 ГБ, 23 с/товар)
+            if torch.cuda.is_available(): torch.cuda.set_per_process_memory_fraction(float(os.environ.get('GG_PREP_GPU_FRACTION', '0.12')))
+        except Exception as e: log('fetcher', 'ограничение видеопамяти не задано:', repr(e)[:120])
         from .prep import Prep
         _PREP[0] = Prep(item_weights=cfg.item_det); log('fetcher', f'детекторы подготовки загружены за {time.time() - t:.0f} с')
     return _PREP[0]
@@ -138,11 +142,13 @@ def main():
     for n in os.listdir(dirs['inbox']):                                     # недокачанное после рестарта — выбросить
         if n.startswith('.tmp-'): shutil.rmtree(os.path.join(dirs['inbox'], n), ignore_errors=True)
     last_reap = 0
+    resume = list(q.owned(cfg.node))                                        # после перезапуска модуля — сначала доделать свои пачки
+    if resume: log('fetcher', 'доделываю свои пачки после перезапуска:', resume)
     with ThreadPoolExecutor(8) as pool:
         while not stop:
             if time.time() - last_reap > 60: q.reap(); last_reap = time.time()
             if inbox_count(dirs) >= cfg.prefetch: time.sleep(1); continue
-            chunk = q.claim(cfg.node, cfg.lease_ttl)
+            chunk = resume.pop(0) if resume else q.claim(cfg.node, cfg.lease_ttl)
             if not chunk: time.sleep(10); continue
             check_chunk(chunk); log('fetcher', 'взял пачку', chunk)
             try: m = load_manifest(st, chunk, dirs)

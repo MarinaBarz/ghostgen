@@ -29,7 +29,7 @@ def main():
         h = have.get(rows[0]['shop'], 0.5)
         if (h >= 0.95) != a.check_only: continue
         rows = [r for r in rows if not r.get('ghost') and r.get('category') != 'Care, Beauty & Home' and r['id'] not in known and r['id'] not in seen
-                and (r.get('pi') if a.check_only else (r.get('images') or r.get('pi')))]
+                and (r.get('images') or r.get('pi'))]
         rows.sort(key=lambda r: (r['id'] not in look, zlib.crc32(r['id'].encode())))
         if rows: shops.append(rows)
     first = [r for rows in shops for r in rows if r['id'] in look]; rest = []
@@ -42,7 +42,8 @@ def main():
     def item(r):
         flux = [u for u in (r.get('gpi'), r.get('nobg')) if u]
         return {'pid': check_pid(r['id']), 'title': r.get('title'), 'category': r.get('category'), 'shop': r.get('shop'),
-                'urls': [] if a.check_only else list((r.get('images') or [])[:5]) + list((r.get('li') or [])[:1]),
+                'urls': (list((r.get('images') or [])[:1]) if not r.get('pi') else []) if a.check_only   # проверка: главное фото, нет его — первое фото магазина
+                        else list((r.get('images') or [])[:5]) + list((r.get('li') or [])[:1]),
                 'pi': r.get('pi'), 'flux': flux, 'in_look': r['id'] in look, 'check_only': a.check_only}
     start = int(q.r.scard(q.K['known']))
     for n, i in enumerate(range(0, len(order), a.chunk)):

@@ -4,8 +4,8 @@
 import json, os
 from .common import atomic_write
 
-ALLOWED = ('jobs/', 'inputs/', 'outputs/', 'results/', 'models/', 'shots/')
-PUBLIC = ('outputs/', 'shots/')                        # публичные: готовые картинки и копии предметных фото магазинов для коллажей (29.09)
+ALLOWED = ('jobs/', 'inputs/', 'outputs/', 'results/', 'models/', 'shots/', 'collages/')
+PUBLIC = ('outputs/', 'shots/', 'collages/')                      # публичные: готовые картинки и копии предметных фото магазинов для коллажей (29.09)
 
 
 def _check_key(key):
